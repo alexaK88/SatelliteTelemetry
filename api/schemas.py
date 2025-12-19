@@ -108,10 +108,10 @@ class TelemetryPacket(BaseModel):
 
     @model_validator(mode="after")
     def timestamp_sanity(self) -> "TelemetryPacket":
-        """
-        Space-grade sanity check:
-        reject packets whose generated_at is too far from server time (±5 min).
-        """
+        # Allow stale timestamps during REPLAY (ground reprocessing)
+        if self.meta is not None and self.meta.source == "REPLAY":
+            return self
+
         now = datetime.now(timezone.utc)
         delta = abs(now - self.header.generated_at)
 
@@ -121,3 +121,4 @@ class TelemetryPacket(BaseModel):
                 f"Delta was {delta}."
             )
         return self
+

@@ -7,6 +7,9 @@ from fastapi.responses import JSONResponse
 
 from api.schemas import TelemetryPacket, TelemetryValidationError
 from processing.validator import validate_packet, HealthStatus
+from storage.parquet_store import ParquetTelemetryStore
+
+STORE = ParquetTelemetryStore()
 
 RECENT_MAX = 2000
 RECENT_PACKETS: Deque[TelemetryPacket] = deque(maxlen=RECENT_MAX)
@@ -47,6 +50,8 @@ def ingest_telemetry(packet: TelemetryPacket):
     except TelemetryValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
+    STORE.append(packet, result.status)
+    
     # Store latest (replace later with CSV / Parquet)
     LATEST_PACKET = packet
     LATEST_STATUS = {

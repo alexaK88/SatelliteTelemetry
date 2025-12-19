@@ -1,11 +1,12 @@
 # monitoring/dashboard.py
 
+import os
 import time
 import requests
 import streamlit as st
 import plotly.express as px
 
-API_BASE = "http://127.0.0.1:8000"
+API_BASE = os.getenv("API_BASE", "http://127.0.0.1:8000")
 
 st.set_page_config(page_title="Satellite Telemetry Console", layout="wide")
 st.title("🛰️ Satellite Telemetry Console")
