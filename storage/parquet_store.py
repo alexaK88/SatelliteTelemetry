@@ -20,7 +20,11 @@ class ParquetTelemetryStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
-    def _flatten(packet: TelemetryPacket, health: str) -> dict:
+    def _flatten(packet: TelemetryPacket,
+                 health: str,
+                 gap: dict | None = None,
+                 pass_id :int | None = None
+                 ) -> dict:
         """
         Flatten telemetry packet into a single row.
         """
@@ -57,10 +61,21 @@ class ParquetTelemetryStore:
             # Meta
             "mode": packet.meta.mode if packet.meta else None,
             "source": packet.meta.source if packet.meta else None,
+
+            # packet loss
+            "gap_detected": gap is not None,
+            "gap_size": gap["gap_size"] if gap else 0,
+            "gap_severity": gap["severity"] if gap else None,
+
+            "pass_id": pass_id
         }
 
-    def append(self, packet: TelemetryPacket, health: str) -> None:
-        row = self._flatten(packet, health)
+    def append(self, packet: TelemetryPacket,
+               health: str,
+               gap: dict | None = None,
+               pass_id: int | None = None
+               ) -> None:
+        row = self._flatten(packet, health, gap, pass_id)
         df_new = pd.DataFrame([row])
 
         if self.path.exists():

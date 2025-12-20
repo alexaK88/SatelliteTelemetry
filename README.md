@@ -233,6 +233,8 @@ The system is designed to be easily extended.
         - demos
         - regression testing
         - fault investigation
-- Dockerized Deployment
 - Multiple spacecraft support
 - Anomaly detection
+- Pass summary stats (duration, packets/pass)
+- Gap counters per pass
+- Cleanly separate LIVE vs REPLAY mode in the UI

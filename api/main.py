@@ -8,8 +8,16 @@ from fastapi.responses import JSONResponse
 from api.schemas import TelemetryPacket, TelemetryValidationError
 from processing.validator import validate_packet, HealthStatus
 from storage.parquet_store import ParquetTelemetryStore
+from processing.packet_monitor import SequenceTracker
+from processing.pass_monitor import PassTracker
 
+# -------- GLOBAL VARIABLES ------------
 STORE = ParquetTelemetryStore()
+
+SEQ_TRACKER = SequenceTracker()
+LAST_GAP = None
+
+PASS_TRACKER = PassTracker()
 
 RECENT_MAX = 2000
 RECENT_PACKETS: Deque[TelemetryPacket] = deque(maxlen=RECENT_MAX)
@@ -43,15 +51,28 @@ def ingest_telemetry(packet: TelemetryPacket):
     - Domain validation handled here (400)
     """
 
-    global LATEST_PACKET, LATEST_STATUS
+    global LATEST_PACKET, LATEST_STATUS, LAST_GAP
 
     try:
         result = validate_packet(packet)
     except TelemetryValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    STORE.append(packet, result.status)
-    
+    packet_gap = None
+    gap = SEQ_TRACKER.update(packet.header.seq)
+    if gap:
+        packet_gap = {
+            "from_seq": gap.from_seq,
+            "to_seq": gap.to_seq,
+            "gap_size": gap.gap_size,
+            "severity": gap.severity,
+            "detected_at": gap.detected_at,
+        }
+        LAST_GAP = packet_gap # persist globally last detected gap
+
+    # pass detection
+    pass_event = PASS_TRACKER.update(packet.header.generated_at)
+
     # Store latest (replace later with CSV / Parquet)
     LATEST_PACKET = packet
     LATEST_STATUS = {
@@ -65,11 +86,15 @@ def ingest_telemetry(packet: TelemetryPacket):
     RECENT_PACKETS.append(packet)
     RECENT_STATUSES.append(LATEST_STATUS)
 
+    STORE.append(packet, result.status, gap=LAST_GAP, pass_id=pass_event.pass_id)
 
     return {
         "accepted": True,
         "health": result.status,
         "messages": result.messages,
+        "seq": packet.header.seq,
+        "packet_gap": LAST_GAP,
+        "pass_id": pass_event.pass_id
     }
 
 
@@ -106,4 +131,16 @@ def get_recent(limit: int = 300):
     return {
         "packets": [p.model_dump(mode="json") for p in packets],
         "statuses": statuses,
+    }
+
+@app.get("/telemetry/last-gap")
+def last_gap():
+    if LAST_GAP is None:
+        return {"gap_detected": False}
+    return LAST_GAP
+
+@app.get("/telemetry/current-pass")
+def current_pass():
+    return {
+        "pass_id": PASS_TRACKER._current_pass_id
     }
